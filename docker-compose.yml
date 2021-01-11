@@ -1,14 +1,28 @@
-version: '3.7'
-
+version: '3.3'
 services:
   db:
-    image: postgres:11
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - 5433:5432
+    image: mysql:5.7
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
     environment:
-      POSTGRES_PASSWORD: postgres
+      MYSQL_DATABASE: 'db'
+      # Password for root access
+      MYSQL_ROOT_PASSWORD: '1234'
+    ports:
+      # <Port exposed> : < MySQL Port running inside container>
+      - '3306:3306'
+    expose:
+      # Opens port 3306 on the container
+      - '3306'
+      # Where our data will be persisted
+    volumes:
+      - my-mitube:/var/lib/mysql
 
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+# Names our volume
 volumes:
-  postgres_data:
+  my-mitube:

@@ -1,49 +1,64 @@
 package session
 
 import (
-	"mitube/api/dbops"
-	"time"
+	"github.com/XiaoxiaYao/mitube/api/dbops"
+	"github.com/XiaoxiaYao/mitube/api/defs"
+	"github.com/XiaoxiaYao/mitube/api/utils"
 	"sync"
+	"time"
 )
 
-var sessionMap *sync.Map
+var sessionMap *sync.Map 
 
 func init() {
 	sessionMap = &sync.Map{}
 }
 
+func nowInMilli() int64{
+	return time.Now().UnixNano()/1000000
+}
+
+func deleteExpiredSession(sid string) {
+	sessionMap.Delete(sid)
+	dbops.DeleteSession(sid)
+}
+
 func LoadSessionsFromDB() {
-	r, err :=dbops.ListSessions()
+	r, err := dbops.RetrieveAllSessions()
 	if err != nil {
 		return
 	}
+
 	r.Range(func(k, v interface{}) bool{
-		session := v.(*dbops.Session)
-		sessionMap.Store(k, session)
+		ss := v.(*defs.SimpleSession)
+		sessionMap.Store(k, ss)
 		return true
 	})
 }
 
-func GenerateNewSession(userId int64) int64 {
-	session, _ := dbops.InsertSession(userId)
-	sessionMap.Store(session.Id, session)
-	return session.Id
+func GenerateNewSessionId(un string) string {
+	id, _ := utils.NewUUID()
+	ct := nowInMilli()
+	ttl := ct + 30 * 60 * 1000// Severside session valid time: 30 min
+
+	ss := &defs.SimpleSession{Username: un, TTL: ttl}
+	sessionMap.Store(id, ss)
+	dbops.InsertSession(id, ttl, un)
+
+	return id
 }
 
-func IsSessionExpired(sid int64) (int64, bool) {
-  session,ok := sessionMap.Load(sid)
-  if ok {
-  	if session.(*dbops.Session).TTL < time.Now().Unix()/1000000 {
-		deleteExpiredSession(sid)
-  		return session.(*dbops.Session).Id, true
+func IsSessionExpired(sid string) (string, bool) {
+	ss, ok := sessionMap.Load(sid)
+	if ok {
+		ct := nowInMilli()
+		if ss.(*defs.SimpleSession).TTL < ct {
+			deleteExpiredSession(sid)
+			return "", true
+		}
+
+		return ss.(*defs.SimpleSession).Username, false
 	}
-	return session.(*dbops.Session).Id, false
-  } else {
-  	return session.(*dbops.Session).Id, true
-  }
-}
 
-func deleteExpiredSession(sid int64) {
-	sessionMap.Delete(sid)
-	_ = dbops.DeleteSession(sid)
+	return "", true
 }
